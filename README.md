@@ -121,6 +121,36 @@ El servidor queda corriendo en `http://127.0.0.1:5000`.
 
 ### `POST /api/autorizar`
 
+Autoriza un comprobante individual ante AFIP y devuelve el CAE.
+
+### `POST /api/procesar-excel`
+
+Procesa un archivo Excel con múltiples facturas. Devuelve CAE, número de comprobante y fecha de vencimiento en las columnas 18 a 21 del archivo de resultados.
+
+**Body (multipart/form-data):**
+```
+file: archivo Excel (.xlsx) con hoja "Facturas"
+```
+
+**Respuesta:**
+```json
+{
+  "procesados": 3,
+  "errores": 1,
+  "resultados": [
+    {"fila": 2, "nro_cbte": 1, "cae": "86190156302210", "resultado": "A"}
+  ],
+  "errores_detalle": [{"fila": 3, "error": "..."}],
+  "archivo": "temp/resultados_facturas.xlsx"
+}
+```
+
+### `GET /api/descargar-resultado`
+
+Descarga el archivo Excel con los resultados del último procesamiento.
+
+### `POST /api/autorizar`
+
 Autoriza un comprobante ante AFIP y devuelve el CAE.
 
 **Body JSON:**

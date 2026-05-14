@@ -2,11 +2,13 @@ import os, base64, re, traceback, subprocess, json
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from zeep import Client as ZeepClient
 from zeep.transports import Transport
 import requests
+import openpyxl
+from openpyxl.styles import PatternFill, Font
 
 # --- CONFIGURACIÓN ---
 CUIT_EMISOR   = int(os.getenv("CUIT_EMISOR",   "20415706619"))
@@ -268,6 +270,92 @@ def api_autorizar():
             "error": str(e),
             "trace": traceback.format_exc()
         }), 500
+
+@app.route("/api/procesar-excel", methods=["POST"])
+def api_procesar_excel():
+    try:
+        if "file" not in request.files:
+            return jsonify({"error": "No se envió archivo"}), 400
+
+        file = request.files["file"]
+        wb = openpyxl.load_workbook(file)
+
+        if "Facturas" not in wb.sheetnames:
+            return jsonify({"error": "No se encontró hoja 'Facturas'"}), 400
+
+        ws = wb["Facturas"]
+        resultados = []
+        errores = []
+
+        headers = [cell.value for cell in ws[1]]
+        col_map = {str(h).strip().lower(): i + 1 for i, h in enumerate(headers)}
+
+        required = ["tipo comprobante", "punto de venta", "fecha (yyyymmdd)", "cuit receptor",
+                    "importe total", "importe neto", "alicuota iva"]
+        for col in required:
+            if col not in col_map:
+                return jsonify({"error": f"Falta columna: {col}"}), 400
+
+        for row_idx in range(2, ws.max_row + 1):
+            row_data = {}
+            for col_name, col_idx in col_map.items():
+                row_data[col_name] = ws.cell(row=row_idx, column=col_idx).value
+
+            if not row_data.get("tipo comprobante"):
+                continue
+
+            try:
+                factura = {
+                    "tipo_cbte": int(row_data.get("tipo comprobante", 11)),
+                    "punto_vta": int(row_data.get("punto de venta", 1)),
+                    "fecha_cbte": str(row_data.get("fecha (yyyymmdd)", "")),
+                    "cuit_receptor": str(row_data.get("cuit receptor", "")),
+                    "doc_tipo": int(row_data.get("doc tipo", 80)),
+                    "concepto": int(row_data.get("concepto", 1)),
+                    "imp_neto": float(row_data.get("importe neto", 0)),
+                    "imp_iva": float(row_data.get("importe iva", 0)),
+                    "imp_total": float(row_data.get("importe total", 0)),
+                    "alicuota_iva": float(row_data.get("alicuota iva", 0)),
+                    "moneda": str(row_data.get("moneda", "PES")),
+                    "cotizacion": float(row_data.get("cotización", 1)),
+                    "condicion_iva_receptor_id": int(row_data.get("condición iva", 5)),
+                }
+
+                res = autorizar_comprobante(factura)
+
+                ws.cell(row=row_idx, column=18).value = res.get("cae", "")
+                ws.cell(row=row_idx, column=19).value = res.get("cae_vto", "")
+                ws.cell(row=row_idx, column=20).value = res.get("nro_cbte", "")
+                ws.cell(row=row_idx, column=21).value = res.get("resultado", "")
+
+                resultados.append({"fila": row_idx, "nro_cbte": res.get("nro_cbte"), "cae": res.get("cae"), "resultado": res.get("resultado")})
+
+            except Exception as e:
+                ws.cell(row=row_idx, column=18).value = f"ERROR: {str(e)[:100]}"
+                errores.append({"fila": row_idx, "error": str(e)})
+
+        output_path = Path("temp/resultados_facturas.xlsx")
+        wb.save(output_path)
+
+        return jsonify({
+            "procesados": len(resultados),
+            "errores": len(errores),
+            "resultados": resultados,
+            "errores_detalle": errores,
+            "archivo": str(output_path)
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@app.route("/api/descargar-resultado", methods=["GET"])
+def api_descargar_resultado():
+    path = Path("temp/resultados_facturas.xlsx")
+    if not path.exists():
+        return jsonify({"error": "No hay resultado disponible"}), 404
+    return send_file(path, as_attachment=True, download_name="resultados_facturas.xlsx")
+
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
