@@ -1,0 +1,7 @@
+certs/
+temp/
+__pycache__/
+*.pyc
+.env
+token_cache.json
+wsaa_debug.txt

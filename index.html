@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Facturador AFIP</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg:        #0d1117;
+    --bg2:       #161b22;
+    --bg3:       #21262d;
+    --border:    #30363d;
+    --text:      #e6edf3;
+    --muted:     #8b949e;
+    --accent:    #58a6ff;
+    --green:     #3fb950;
+    --red:       #f85149;
+    --yellow:    #d29922;
+    --mono:      'IBM Plex Mono', monospace;
+    --sans:      'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Header ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--bg2);
+  }
+  header .logo {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: grid; place-items: center;
+    font-size: 18px; font-weight: 700;
+    color: var(--bg);
+    font-family: var(--mono);
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 16px; font-weight: 600; letter-spacing: .02em; }
+  header p  { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .badge {
+    margin-left: auto;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-family: var(--mono);
+    font-weight: 600;
+    letter-spacing: .04em;
+  }
+  .badge.homo  { background: rgba(210,153,34,.18); color: var(--yellow); border: 1px solid var(--yellow); }
+  .badge.prod  { background: rgba(63,185,80,.15);  color: var(--green);  border: 1px solid var(--green); }
+
+  /* ── Layout ── */
+  main {
+    flex: 1;
+    max-width: 900px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 32px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  /* ── Card ── */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  .card-header .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+  .card-body { padding: 24px; }
+
+  /* ── Drop zone ── */
+  #dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    background: transparent;
+  }
+  #dropzone:hover, #dropzone.drag { border-color: var(--accent); background: rgba(88,166,255,.05); }
+  #dropzone .icon { font-size: 40px; margin-bottom: 12px; }
+  #dropzone h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  #dropzone p  { font-size: 13px; color: var(--muted); }
+  #dropzone input { display: none; }
+
+  /* ── File info strip ── */
+  #file-info {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 12px;
+  }
+  #file-info .file-icon { font-size: 22px; }
+  #file-info .file-name { font-family: var(--mono); font-size: 13px; flex: 1; }
+  #file-info .file-size { font-size: 12px; color: var(--muted); }
+  #file-info .clear-btn {
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 18px; line-height: 1;
+    transition: color .15s;
+  }
+  #file-info .clear-btn:hover { color: var(--red); }
+
+  /* ── Buttons ── */
+  button {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: opacity .15s, transform .1s;
+  }
+  button:active { transform: scale(.97); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--bg);
+    padding: 10px 22px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .btn-primary:hover:not(:disabled) { opacity: .85; }
+
+  .btn-row {
+    display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;
+  }
+
+  /* ── Progress ── */
+  #progress-wrap { display: none; }
+  #progress-bar-bg {
+    height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; margin-bottom: 6px;
+  }
+  #progress-bar { height: 100%; background: var(--accent); width: 0; transition: width .3s; border-radius: 3px; }
+  #progress-text { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+  /* ── Results ── */
+  #results { display: none; }
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-box {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+  .stat-box .stat-num {
+    font-size: 28px;
+    font-weight: 700;
+    font-family: var(--mono);
+    line-height: 1;
+  }
+  .stat-box .stat-lbl { font-size: 11px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .05em; }
+  .stat-box.ok   .stat-num { color: var(--green); }
+  .stat-box.err  .stat-num { color: var(--red); }
+  .stat-box.tot  .stat-num { color: var(--accent); }
+
+  /* ── Table ── */
+  .tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th {
+    background: var(--bg3);
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--mono);
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .04em;
+  }
+  .pill.ok  { background: rgba(63,185,80,.15); color: var(--green); }
+  .pill.err { background: rgba(248,81,73,.15);  color: var(--red); }
+
+  /* ── Info box ── */
+  .info-box {
+    background: rgba(88,166,255,.08);
+    border: 1px solid rgba(88,166,255,.25);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .info-box strong { color: var(--text); }
+  .info-box a { color: var(--accent); text-decoration: none; }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 18px;
+    font-size: 13px; max-width: 340px;
+    transform: translateY(120%); transition: transform .25s;
+    z-index: 100;
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  #toast.show { transform: translateY(0); }
+  #toast.toast-err { border-color: var(--red); }
+  #toast.toast-ok  { border-color: var(--green); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">AF</div>
+  <div>
+    <h1>Facturador AFIP</h1>
+    <p>Carga masiva por Excel · WSFE v1</p>
+  </div>
+  <span class="badge homo" id="env-badge">HOMOLOGACIÓN</span>
+</header>
+
+<main>
+
+  <!-- Status conexión -->
+  <div id="status-card" class="card">
+    <div class="card-header"><span class="dot"></span>Conexión con el backend</div>
+    <div class="card-body">
+      <p id="status-text" style="font-size:13px;color:var(--muted)">Verificando…</p>
+    </div>
+  </div>
+
+  <!-- Upload -->
+  <div class="card">
+    <div class="card-header"><span class="dot"></span>Subir Excel de Facturas</div>
+    <div class="card-body">
+
+      <div class="info-box" style="margin-bottom:18px">
+        Usá el <strong>Excel modelo</strong> con los campos requeridos. Cada fila es una factura independiente.
+        Descargá el modelo desde el backend: <a href="#" id="dl-modelo">facturas_modelo.xlsx</a>
+      </div>
+
+      <div id="dropzone">
+        <input type="file" id="file-input" accept=".xlsx,.xls">
+        <div class="icon">📂</div>
+        <h3>Arrastrá el Excel o hacé clic para seleccionar</h3>
+        <p>Formatos aceptados: .xlsx · .xls</p>
+      </div>
+
+      <div id="file-info">
+        <span class="file-icon">📄</span>
+        <span class="file-name" id="fn">—</span>
+        <span class="file-size" id="fs">—</span>
+        <button class="clear-btn" id="clear-btn" title="Quitar archivo">✕</button>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-primary" id="upload-btn" disabled>
+          <span>⚡</span> Autorizar facturas
+        </button>
+      </div>
+
+      <div id="progress-wrap" style="margin-top:16px">
+        <div id="progress-bar-bg"><div id="progress-bar"></div></div>
+        <p id="progress-text">Enviando…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Resultados -->
+  <div class="card" id="results">
+    <div class="card-header"><span class="dot"></span>Resultado</div>
+    <div class="card-body">
+      <div class="summary-grid">
+        <div class="stat-box tot"><div class="stat-num" id="s-total">0</div><div class="stat-lbl">Total</div></div>
+        <div class="stat-box ok" ><div class="stat-num" id="s-ok">0</div><div class="stat-lbl">Autorizadas</div></div>
+        <div class="stat-box err"><div class="stat-num" id="s-err">0</div><div class="stat-lbl">Errores</div></div>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fila</th>
+              <th>Estado</th>
+              <th>Tipo/Pto</th>
+              <th>Nro Cbte</th>
+              <th>CAE</th>
+              <th>Vto CAE</th>
+              <th>Detalle</th>
+            </tr>
+          </thead>
+          <tbody id="tbl-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+const API = "http://localhost:5000/api";
+let selectedFile = null;
+
+// ── Status
+async function checkStatus() {
+  try {
+    const r = await fetch(`${API}/status`);
+    const d = await r.json();
+    const env = d.homologacion;
+    document.getElementById("env-badge").textContent  = env ? "HOMOLOGACIÓN" : "PRODUCCIÓN";
+    document.getElementById("env-badge").className    = "badge " + (env ? "homo" : "prod");
+    document.getElementById("status-text").innerHTML  =
+      `<span style="color:var(--green)">✔ Conectado</span> · CUIT emisor: <b>${d.cuit_emisor}</b> · ` +
+      `Ambiente: <b>${env ? "Homologación" : "Producción"}</b>`;
+  } catch {
+    document.getElementById("status-text").innerHTML =
+      `<span style="color:var(--red)">✘ Backend no disponible</span> · ` +
+      `Asegurate de correr <code style="font-family:monospace">python app.py</code> en puerto 5000`;
+  }
+}
+checkStatus();
+
+// ── Dropzone
+const dropzone  = document.getElementById("dropzone");
+const fileInput = document.getElementById("file-input");
+
+dropzone.addEventListener("click",    () => fileInput.click());
+dropzone.addEventListener("dragover",  e => { e.preventDefault(); dropzone.classList.add("drag"); });
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("drag"));
+dropzone.addEventListener("drop", e => {
+  e.preventDefault(); dropzone.classList.remove("drag");
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+});
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+document.getElementById("clear-btn").addEventListener("click", clearFile);
+
+function setFile(f) {
+  if (!/\.(xlsx|xls)$/i.test(f.name)) { toast("❌ Solo se aceptan archivos .xlsx o .xls", "err"); return; }
+  selectedFile = f;
+  document.getElementById("fn").textContent = f.name;
+  document.getElementById("fs").textContent = (f.size / 1024).toFixed(1) + " KB";
+  document.getElementById("file-info").style.display = "flex";
+  document.getElementById("upload-btn").disabled = false;
+  document.getElementById("results").style.display = "none";
+}
+
+function clearFile() {
+  selectedFile = null;
+  fileInput.value = "";
+  document.getElementById("file-info").style.display = "none";
+  document.getElementById("upload-btn").disabled = true;
+}
+
+// ── Upload & autorizar
+document.getElementById("upload-btn").addEventListener("click", async () => {
+  if (!selectedFile) return;
+
+  const btn      = document.getElementById("upload-btn");
+  const progWrap = document.getElementById("progress-wrap");
+  const progBar  = document.getElementById("progress-bar");
+  const progTxt  = document.getElementById("progress-text");
+
+  btn.disabled = true;
+  progWrap.style.display = "block";
+  progBar.style.width    = "10%";
+  progTxt.textContent    = "Subiendo archivo…";
+
+  const fd = new FormData();
+  fd.append("file", selectedFile);
+
+  try {
+    progBar.style.width  = "40%";
+    progTxt.textContent  = "Procesando facturas en AFIP…";
+
+    const r = await fetch(`${API}/upload-excel`, { method: "POST", body: fd });
+    const d = await r.json();
+
+    progBar.style.width = "100%";
+    progTxt.textContent = "Listo";
+
+    if (d.error) { toast("❌ " + d.error, "err"); btn.disabled = false; return; }
+
+    renderResults(d);
+    toast(`✔ ${d.autorizados}/${d.total} facturas autorizadas`, d.errores > 0 ? "err" : "ok");
+  } catch (e) {
+    toast("❌ Error de red: " + e.message, "err");
+  } finally {
+    setTimeout(() => { progWrap.style.display = "none"; progBar.style.width = "0"; }, 1500);
+    btn.disabled = false;
+  }
+});
+
+// ── Render results
+function renderResults(d) {
+  document.getElementById("s-total").textContent = d.total;
+  document.getElementById("s-ok").textContent    = d.autorizados;
+  document.getElementById("s-err").textContent   = d.errores;
+
+  const tbody = document.getElementById("tbl-body");
+  tbody.innerHTML = "";
+  for (const r of d.detalle) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.fila}</td>
+      <td><span class="pill ${r.ok ? 'ok' : 'err'}">${r.ok ? 'OK' : 'ERROR'}</span></td>
+      <td>${r.ok ? r.tipo_cbte + " / " + r.punto_vta : "—"}</td>
+      <td>${r.ok ? r.nro_cbte  : "—"}</td>
+      <td style="color:var(--accent)">${r.ok ? r.cae   : "—"}</td>
+      <td>${r.ok ? r.cae_vto  : "—"}</td>
+      <td style="color:var(--${r.ok ? 'muted' : 'red'})">${r.ok ? "✔" : r.error}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+  document.getElementById("results").style.display = "block";
+}
+
+// ── Toast
+function toast(msg, type = "ok") {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.className   = `show toast-${type}`;
+  setTimeout(() => el.classList.remove("show"), 4000);
+}
+</script>
+</body>
+</html>
